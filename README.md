@@ -37,3 +37,5 @@ python -m winMessageMonitor
 ```
 
 The application will begin listening for Windows messages and log relevant events to the console.
+
+Exit with `Ctrl-C`.
