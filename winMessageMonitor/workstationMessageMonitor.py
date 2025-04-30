@@ -1,15 +1,18 @@
 import atexit
 import logging
-import datetime
+import sys
 import time
 import win32api
 import win32con
 import win32gui
 import win32ts
+import ctypes
+import signal
 
 from winMessageMonitor.evtSessionEvent import SessionEvent
 from winMessageMonitor.evtTimeChangeEvent import TimeChangeEvent
 from winMessageMonitor.evtPowerEvent import PowerEvent
+from winMessageMonitor.evtThemeChangeEvent import ThemeChangeEvent
 from winMessageMonitor.msgDict import MSG_DICT as winUserMessages
 
 
@@ -30,25 +33,35 @@ class WorkstationMessageMonitor:
         wndClass.hInstance = handleInstance = win32api.GetModuleHandle(None)
         wndClass.lpszClassName = self.CLASS_NAME
         wndClass.lpfnWndProc = self._windowProcedure
-        window_class = win32gui.RegisterClass(wndClass)
+        try:
+            window_class = win32gui.RegisterClass(wndClass)
+        except win32gui.error as e:
+            logging.error(f"Failed to register window class: {e}")
+            raise
 
         style = 0
-        self.windowHandle = win32gui.CreateWindow(window_class,         # Window class
-                                                  self.WINDOW_TITLE,    # Window text
-                                                  style,                # Window style
-                                                  # size and position
-                                                  0, 0, win32con.CW_USEDEFAULT, win32con.CW_USEDEFAULT,
-                                                  # Parent window, Menu, Instance handle, Additional application data
-                                                  0, 0, handleInstance, None)
+        self.windowHandle = win32gui.CreateWindow(
+            window_class,         # Window class
+            self.WINDOW_TITLE,    # Window text
+            style,                # Window style
+            0, 0, win32con.CW_USEDEFAULT, win32con.CW_USEDEFAULT,  # Size and position
+            0, 0, handleInstance, None  # Parent window, Menu, Instance handle, Additional application data
+        )
+
+        if not self.windowHandle:
+            logging.error("Failed to create window")
+            sys.exit(1)
+
         win32gui.UpdateWindow(self.windowHandle)
 
-        # scope = win32ts.NOTIFY_FOR_THIS_SESSION
+        # Register for session notifications
         scope = win32ts.NOTIFY_FOR_ALL_SESSIONS
         win32ts.WTSRegisterSessionNotification(self.windowHandle, scope)
 
     @staticmethod
     def listen():
-        logging.info('Listening')
+        logging.info("Listening for Windows messages...")
+
         continueProcessing = True
         while continueProcessing:
             try:
@@ -58,37 +71,59 @@ class WorkstationMessageMonitor:
                 continueProcessing = False
 
     def stop(self):
-        logging.info('Exiting')
+        logging.info("Exiting")
         exitCode = 0
-        win32ts.WTSUnRegisterSessionNotification(self.windowHandle)
+        try:
+            win32ts.WTSUnRegisterSessionNotification(self.windowHandle)
+        except Exception as e:
+            logging.error(f"Error unregistering session notification: {e}")
         win32gui.PostQuitMessage(exitCode)
 
-    @staticmethod
-    def _windowProcedure(hWnd: int, uMsg: int, wParam, lParam) -> bool:
+    def _windowProcedure(self, hWnd: int, uMsg: int, wParam, lParam) -> int:
         """
         WindowProc callback function.
-
-        https://learn.microsoft.com/en-us/windows/win32/api/winuser/nc-winuser-wndproc
-
-        :param hWnd: A handle to the window.
-        :param uMsg: The message.
-        :param wParam: Additional message information.
-        :param lParam: Additional message information.
-
         """
         if uMsg == PowerEvent.MESSAGE:
-            logging.info(f'[{datetime.datetime.now().isoformat()}]  {PowerEvent.EVENTS[wParam]}, lParam: {lParam}')
+            event = PowerEvent.EVENTS.get(wParam, f"Unknown Power Event ({wParam})")
+            logging.info(f"{event}, lParam: {lParam}")
         elif uMsg == TimeChangeEvent.MESSAGE:
-            logging.info(f'[{datetime.datetime.now().isoformat()}]  WM_TIMECHANGE')
+            logging.info(f"WM_TIMECHANGE")
+        elif uMsg == ThemeChangeEvent.MESSAGE:
+            logging.info(f"WM_THEMECHANGED")
+        elif uMsg == 0x001A:  # WM_SETTINGCHANGE, WM_WININICHANGE
+            changedSetting = self.getStringFromLparam(lParam)
+            logging.info(
+                f'{winUserMessages.get(uMsg, "WM_SETTINGCHANGE")}, '
+                f"wParam: {wParam} ({hex(wParam)}), lParam: {changedSetting or lParam}"
+            )
         elif uMsg == SessionEvent.MESSAGE:
-            logging.info(f'[{datetime.datetime.now().isoformat()}]  {SessionEvent.EVENTS[wParam]}, session: {lParam}')
+            session_event = SessionEvent.EVENTS.get(wParam, f"Unknown Session Event ({wParam})")
+            logging.info(f"{session_event}, session: {lParam}")
         else:
             if uMsg in winUserMessages:
-                logging.info(f'[{datetime.datetime.now().isoformat()}]  {winUserMessages[uMsg]}, wParam: {wParam} ({hex(wParam)}), lParam: {lParam}')
+                logging.info(f"{winUserMessages[uMsg]}, " f"wParam: {wParam} ({hex(wParam)}), lParam: {lParam}")
             else:
-                logging.info(f'[{datetime.datetime.now().isoformat()}]  Unknown message {uMsg} ({hex(uMsg)}), wParam: {wParam} ({hex(wParam)}), lParam: {lParam}')
+                logging.warning(
+                    f"Unknown message {uMsg} ({hex(uMsg)}), " f"wParam: {wParam} ({hex(wParam)}), lParam: {lParam}"
+                )
 
-        return True
+        return win32gui.DefWindowProc(hWnd, uMsg, wParam, lParam)
+
+    def getStringFromLparam(self, lParam):
+        """
+        Extracts a string from the lParam pointer.
+
+        :param lParam: The lParam value from the message.
+        :return: Decoded string if available, else None.
+        """
+        try:
+            # Cast lParam to a pointer to a wide character string
+            ptr = ctypes.cast(lParam, ctypes.c_wchar_p)
+            if ptr:
+                return ptr.value
+        except Exception as e:
+            logging.error(f"Error extracting string from lParam: {e}")
+        return None
 
 
 def main():
