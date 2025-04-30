@@ -2,13 +2,13 @@
 
 ChatGPT wants you to know this:
 
-"WinMessageMonitor is a Python-based application designed to monitor and 
+`"WinMessageMonitor is a Python-based application designed to monitor and 
 log various Windows system messages. It provides real-time insights into 
 session events, power changes, time updates, theme changes, and other 
-significant system activities by leveraging the Windows API."
+significant system activities by leveraging the Windows API."`
 
 I love the "insights" part. 
-It's lovely to have "insights".
+It's lovely to have "insights", especially if they are real-time.
 
 ### Features
 
@@ -37,5 +37,4 @@ python -m winMessageMonitor
 ```
 
 The application will begin listening for Windows messages and log relevant events to the console.
-
 Exit with `Ctrl-C`.
