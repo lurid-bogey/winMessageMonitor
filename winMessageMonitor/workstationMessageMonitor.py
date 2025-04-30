@@ -7,10 +7,10 @@ import win32con
 import win32gui
 import win32ts
 
-from evtSessionEvent import SessionEvent
-from evtTimeChangeEvent import TimeChangeEvent
-from evtPowerEvent import PowerEvent
-from msgDict import MSG_DICT as winUserMessages
+from winMessageMonitor.evtSessionEvent import SessionEvent
+from winMessageMonitor.evtTimeChangeEvent import TimeChangeEvent
+from winMessageMonitor.evtPowerEvent import PowerEvent
+from winMessageMonitor.msgDict import MSG_DICT as winUserMessages
 
 
 # https://learn.microsoft.com/en-us/windows/win32/winmsg/about-messages-and-message-queues
@@ -91,7 +91,11 @@ class WorkstationMessageMonitor:
         return True
 
 
-if __name__ == '__main__':
+def main():
     logging.basicConfig(level=logging.DEBUG)
     m = WorkstationMessageMonitor()
     m.listen()
+
+
+if __name__ == '__main__':
+    main()

@@ -3,7 +3,7 @@ import pprint
 
 
 def parseWinUserH():
-    with open(r'winuser.h', 'r') as inFile:
+    with open(r'WinUser.h', 'r') as inFile:
         rawLines = inFile.readlines()
 
     with open(r'msgDict.py', 'w') as outFile:
